@@ -1,1 +1,3 @@
 /buckets/*
+/ingestor/.env
+/api/.env
