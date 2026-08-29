@@ -1,3 +1,10 @@
+### Base Ignore Rules
 /buckets/*
+
+### Ingestor Specific Ignore Rules
 /ingestor/.env
+/ingestor/venv
+
+### API Specific Ignore Rules
 /api/.env
+/api/venv
