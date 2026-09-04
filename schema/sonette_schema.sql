@@ -20,7 +20,7 @@ CREATE TYPE song_state AS ENUM('suggested', 'accepted', 'expired');
 
 DROP TABLE IF EXISTS artist;
 CREATE TABLE IF NOT EXISTS artist (
-	artist_id UUID PRIMARY KEY,
+	artist_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	"name" varchar,
 	biography text,
 	country varchar,
@@ -34,7 +34,7 @@ CREATE INDEX ON artist("name");
 
 DROP TABLE IF EXISTS album;
 CREATE TABLE IF NOT EXISTS album (
-	album_id UUID PRIMARY KEY,
+	album_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	artist_id UUID REFERENCES artist(artist_id) ON DELETE CASCADE,
 	title varchar,
 	img_bucket varchar,
@@ -51,7 +51,7 @@ CREATE INDEX ON album(title);
 
 DROP TABLE IF EXISTS song;
 CREATE TABLE IF NOT EXISTS song (
-	song_id UUID PRIMARY KEY,
+	song_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	album_id UUID REFERENCES album(album_id) ON DELETE RESTRICT,
 	title varchar,
 	duration_ms int,
@@ -69,7 +69,7 @@ CREATE INDEX ON song(title);
 
 DROP TABLE IF EXISTS audio_file;
 CREATE TABLE IF NOT EXISTS audio_file (
-	file_id UUID PRIMARY KEY,
+	file_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	song_id UUID REFERENCES song(song_id) ON DELETE SET NULL,
 	storage_key varchar,
 	bucket varchar,
@@ -85,7 +85,7 @@ CREATE INDEX ON audio_file(song_id);
 
 DROP TABLE IF EXISTS "user";
 CREATE TABLE IF NOT EXISTS "user" (
-	user_id UUID PRIMARY KEY,
+	user_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	email varchar UNIQUE,
 	"password" varchar,
 	"name" varchar,
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS "user" (
 
 DROP TABLE IF EXISTS device;
 CREATE TABLE IF NOT EXISTS device (
-	device_id UUID PRIMARY KEY,
+	device_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	user_id UUID REFERENCES "user"(user_id) ON DELETE CASCADE,
 	"type" device_type,
 	verified_at timestamp
@@ -114,7 +114,7 @@ CREATE INDEX ON device(user_id);
 
 DROP TABLE IF EXISTS playlist;
 CREATE TABLE IF NOT EXISTS playlist (
-	playlist_id UUID PRIMARY KEY,
+	playlist_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	user_id UUID REFERENCES "user"(user_id) ON DELETE SET NULL,
 	title varchar,
 	description varchar,
@@ -130,7 +130,7 @@ CREATE INDEX ON playlist(user_id);
 
 DROP TABLE IF EXISTS playlist_song;
 CREATE TABLE IF NOT EXISTS playlist_song (
-	playlist_song_id UUID PRIMARY KEY,
+	playlist_song_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	playlist_id UUID REFERENCES playlist(playlist_id) ON DELETE CASCADE,
 	song_id UUID REFERENCES song(song_id) ON DELETE CASCADE,
 	user_id UUID REFERENCES "user"(user_id) ON DELETE SET NULL,
@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS friendship_song (
 
 DROP TABLE IF EXISTS user_history;
 CREATE TABLE IF NOT EXISTS user_history (
-	playback_id UUID PRIMARY KEY,
+	playback_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	user_id UUID REFERENCES "user"(user_id) ON DELETE CASCADE,
 	device_id UUID REFERENCES device(device_id) ON DELETE SET NULL,
 	song_id UUID REFERENCES song(song_id) ON DELETE SET NULL,
@@ -251,7 +251,7 @@ CREATE INDEX ON user_history(song_id);
 
 DROP TABLE IF EXISTS mood;
 CREATE TABLE IF NOT EXISTS mood (
-	mood_id UUID PRIMARY KEY,
+	mood_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	"name" varchar,
 	description varchar,
 	color_hex varchar
@@ -259,7 +259,7 @@ CREATE TABLE IF NOT EXISTS mood (
 
 DROP TABLE IF EXISTS genre;
 CREATE TABLE IF NOT EXISTS genre(
-	genre_id UUID PRIMARY KEY,
+	genre_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	parent_genre_id UUID REFERENCES genre(genre_id) ON DELETE CASCADE,
 	"name" varchar,
 	description varchar
