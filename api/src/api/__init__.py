@@ -1,5 +1,6 @@
 # API Server for Sonette
 import sys
+from turtle import title
 
 sys.path.append("src/api")  # Add the src directory to the Python path
 
@@ -23,18 +24,34 @@ async def health():
                 "message": "API is running smoothly."
             }
 
-@app.get("/album/{album_id}")
-async def get_album(album_id: str):
+@app.get("/artist/{year}")
+async def get_artist(year: int):
     conn = await open_connection()
 
     if conn is None:
         return {"error": "Failed to connect to the database."}
 
     try:
-        query = f"SELECT * FROM music_service.album WHERE album_id = '{album_id}'"
-        result = await conn.fetchrow(query)
+        query = f"SELECT * FROM music_service.artist WHERE formed_year = {year}"
+        result = await conn.fetch(query)
         return result
     except Exception as e:
-        return {"error": f"Error fetching album: {e}"}
+        return {"error": f"Error fetching artist: {e}"}
+    finally:
+        await close_connection(conn)
+
+@app.get("/user/{username}")
+async def get_user(username: str):
+    conn = await open_connection()
+
+    if conn is None:
+        return {"error": "Failed to connect to the database."}
+
+    try:
+        query = f"SELECT * FROM music_service.user WHERE u.username = '{username}'"
+        result = await conn.fetch(query)
+        return result
+    except Exception as e:
+        return {"error": f"Error fetching user: {e}"}
     finally:
         await close_connection(conn)
