@@ -48,7 +48,7 @@ async def get_user(username: str):
         return {"error": "Failed to connect to the database."}
 
     try:
-        query = f"SELECT * FROM music_service.user WHERE u.username = '{username}'"
+        query = f"SELECT * FROM music_service.user WHERE username = '{username}'"
         result = await conn.fetch(query)
         return result
     except Exception as e:
