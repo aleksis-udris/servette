@@ -9,3 +9,4 @@
 /api/.venv
 /api/src/api/__pycache__
 /api/src/api/.env
+/schema/insert_statements.sql
