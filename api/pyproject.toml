@@ -7,7 +7,12 @@ authors = [
     { name = "aleksis-udris", email = "aleksis060806@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "asyncpg>=0.31.0",
+    "dotenv>=0.9.9",
+    "fastapi[standard]>=0.141.1",
+    "websockets>=17.1",
+]
 
 [project.scripts]
 api = "api:main"

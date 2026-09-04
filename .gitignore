@@ -6,5 +6,6 @@
 /ingestor/venv
 
 ### API Specific Ignore Rules
-/api/.env
-/api/venv
+/api/.venv
+/api/src/api/__pycache__
+/api/src/api/.env
