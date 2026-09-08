@@ -25,4 +25,20 @@ async def close_connection(conn):
     except Exception as e:
         print(f"Error closing the database connection: {e}")
 
-     
+async def get_file_info(file_id: str) -> str:
+    conn = await open_connection()
+    
+    if conn is None:
+        return {"error": "Failed to connect to the database."}
+
+    try:
+        query = f"SELECT * FROM music_service.audio_file WHERE file_id = $1"
+        result = await conn.fetchrow(query, file_id)
+        if result:
+            return result
+        else:
+            return {"error": "File ID not found in the database."}
+    except Exception as e:
+        return {"error": f"Error fetching file: {e}"}
+    finally:
+        await close_connection(conn)
