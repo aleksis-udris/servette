@@ -3,11 +3,12 @@ import os
 import re
 import sys
 
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 sys.path.append("src/api")  # Add the src directory to the Python path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import asyncpg
 from api.tools import *
@@ -17,6 +18,19 @@ load_dotenv()
 app = FastAPI(title="Sonette API", version="1.0.0")
 
 CHUNK_SIZE = 1024 * 1024
+
+origins = [
+    "http://localhost:3000",  # Default Create React App port
+    "http://localhost:5173",  # Default Vite port
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,       # Allows specific origins
+    allow_credentials=True,
+    allow_methods=["*"],         # Allows all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],         # Allows all headers
+)
 
 @app.get("/")
 async def root():
@@ -32,42 +46,96 @@ async def health():
                 "message": "API is running smoothly."
             }
 
-@app.get("/artist/{year}")
-async def get_artist(year: int):
+# Done
+@app.get("/artists")
+async def get_artists():
     conn = await open_connection()
 
     if conn is None:
         return {"error": "Failed to connect to the database."}
 
     try:
-        query = f"SELECT * FROM music_service.artist WHERE formed_year = {year}"
+        query = f"SELECT * FROM music_service.artist"
         result = await conn.fetch(query)
         return result
     except Exception as e:
-        return {"error": f"Error fetching artist: {e}"}
+        return {"error": f"Error fetching artists: {e}"}
     finally:
         await close_connection(conn)
 
-@app.get("/user/{username}")
-async def get_user(username: str):
+# Done
+@app.get("/artist/{artist_id}/image", response_class=FileResponse)
+async def get_artist_image(artist_id: str):
     conn = await open_connection()
 
     if conn is None:
-        return {"error": "Failed to connect to the database."}
+        raise HTTPException(status_code=503, detail="Failed to connect to the database.")
 
     try:
-        query = f"SELECT * FROM music_service.user WHERE username = '{username}'"
-        result = await conn.fetch(query)
-        return result
+        query = "SELECT * FROM music_service.artist WHERE artist_id = $1"
+        result = await conn.fetchrow(query, artist_id)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Artist not found")
+
+        image_path = os.path.join(os.getenv("ASSET_DIR"), result["img_bucket"], result["img_storage_key"])
+
+        if not os.path.exists(image_path):
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        return image_path
+
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": f"Error fetching user: {e}"}
+        raise HTTPException(status_code=500, detail=f"Error fetching artist image: {e}")
     finally:
         await close_connection(conn)
 
-@app.get("/stream/{file_id}")
-async def stream_file(file_id: str, request: Request):
+# Done
+@app.get("/song/{song_id}/cover", response_class=FileResponse)
+async def get_song_cover(song_id: str):
+    conn = await open_connection()
 
-    row = await get_file_info(file_id)
+    if conn is None:
+        raise HTTPException(status_code=503, detail="Failed to connect to the database.")
+
+    try:
+        query = "SELECT * FROM music_service.album WHERE album_id = (SELECT album_id FROM music_service.song WHERE song_id = $1)"
+        result = await conn.fetchrow(query, song_id)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Song not found")
+
+        image_path = os.path.join(os.getenv("ASSET_DIR"), result["img_bucket"], result["img_storage_key"])
+
+        if not os.path.exists(image_path):
+            raise HTTPException(status_code=404, detail="Cover image not found")
+
+        return image_path
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching song cover: {e}")
+    finally:
+        await close_connection(conn)
+
+# Done
+@app.get("/song/{song_id}/stream/{quality}", response_class=StreamingResponse)
+async def stream_song(song_id: str, quality: str, request: Request):
+
+    conn = await open_connection()
+
+    if conn is None:
+        raise HTTPException(status_code=503, detail="Failed to connect to the database.")
+
+    query = """SELECT * FROM music_service.song
+                LEFT JOIN music_service.audio_file ON song.song_id = audio_file.song_id
+                WHERE song.song_id = $1 AND audio_file.quality_tier = $2"""
+    
+    row = await conn.fetchrow(query, song_id, quality)
+
     file_path = os.path.join(os.getenv("ASSET_DIR"), row["bucket"], row["storage_key"])
     print(f"Streaming file from path: {file_path}")
 
@@ -123,6 +191,81 @@ async def stream_file(file_id: str, request: Request):
     }
 
     return StreamingResponse(iter_full(), media_type=media_type, headers=headers)
-        
 
+# Done
+@app.get("/album/{album_id}/cover", response_class=FileResponse)
+async def get_album_cover(album_id: str):
+    conn = await open_connection()
+
+    if conn is None:
+        raise HTTPException(status_code=503, detail="Failed to connect to the database.")
+
+    try:
+        query = "SELECT * FROM music_service.album WHERE album_id = $1"
+        result = await conn.fetchrow(query, album_id)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Album not found")
+
+        image_path = os.path.join(os.getenv("ASSET_DIR"), result["img_bucket"], result["img_storage_key"])
+
+        if not os.path.exists(image_path):
+            raise HTTPException(status_code=404, detail="Cover image not found")
+
+        return image_path
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching album cover: {e}")
+    finally:
+        await close_connection(conn)
+
+# Done
+@app.get("/album/{album_id}/songs")
+async def get_album_songs(album_id: str):
+    conn = open_connection()
+
+    if conn is None:
+        raise HTTPException(status_code=503, detail="Could not open a connection to database!")
+
+    try:
+        query = """SELECT * FROM music_service.song WHERE album_id = $1"""
+        rows = conn.fetch(query, album_id)
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="No such album and/or its songs exist.")
+
+        return rows
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(code=500, detail="Failed fetching songs of the album.")
+    finally:
+        await close_connection(conn)
+
+# Done
+@app.get("/artist/{artist_id}/albums")
+async def get_artist_albums(artist_id: str):
+    conn = open_connection()
     
+    if conn is None:
+        raise HTTPException(status_code=503, detail="Could not open a connection to database!")
+
+    try:
+        query = """SELECT * FROM music_service.album WHERE artist_id = $1"""
+        rows = conn.fetch(query, artist_id)
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="No such album and/or its songs exist.")
+
+        return rows
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(code=500, detail="Failed fetching songs of the album.")
+    finally:
+        await close_connection(conn)
+
