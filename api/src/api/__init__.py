@@ -19,19 +19,6 @@ app = FastAPI(title="Sonette API", version="1.0.0")
 
 CHUNK_SIZE = 1024 * 1024
 
-origins = [
-    "http://localhost:3000",  # Default Create React App port
-    "http://localhost:5173",  # Default Vite port
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,       # Allows specific origins
-    allow_credentials=True,
-    allow_methods=["*"],         # Allows all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],         # Allows all headers
-)
-
 @app.get("/")
 async def root():
     return {
