@@ -10,14 +10,16 @@ sys.path.append("src/api")  # Add the src directory to the Python path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import asyncpg
 from api.tools import *
+import bcrypt
 
 load_dotenv()
 
 app = FastAPI(title="Sonette API", version="1.0.0")
 
 CHUNK_SIZE = 1024 * 1024
+
+# Get endpoints
 
 @app.get("/")
 async def root():
@@ -33,7 +35,6 @@ async def health():
                 "message": "API is running smoothly."
             }
 
-# Done
 @app.get("/artists")
 async def get_artists():
     conn = await open_connection()
@@ -50,7 +51,6 @@ async def get_artists():
     finally:
         await close_connection(conn)
 
-# Done
 @app.get("/users")
 async def get_users():
     conn = await open_connection()
@@ -74,7 +74,6 @@ async def get_users():
     finally:
         await close_connection(conn)
 
-# Done
 @app.get("/user/{user_id}/picture", response_class=FileResponse)
 async def get_user_picture(user_id: str):
     conn = await open_connection()
@@ -103,7 +102,6 @@ async def get_user_picture(user_id: str):
     finally:
         await close_connection(conn)
 
-# Done
 @app.get("/artist/{artist_id}/image", response_class=FileResponse)
 async def get_artist_image(artist_id: str):
     conn = await open_connection()
@@ -132,7 +130,6 @@ async def get_artist_image(artist_id: str):
     finally:
         await close_connection(conn)
 
-# Done
 @app.get("/album/{album_id}/cover", response_class=FileResponse)
 async def get_album_cover(album_id: str):
     conn = await open_connection()
@@ -161,7 +158,6 @@ async def get_album_cover(album_id: str):
     finally:
         await close_connection(conn)
 
-# Done
 @app.get("/song/{song_id}/cover", response_class=FileResponse)
 async def get_song_cover(song_id: str):
     conn = await open_connection()
@@ -190,7 +186,76 @@ async def get_song_cover(song_id: str):
     finally:
         await close_connection(conn)
 
-# Done
+@app.get("/album/{album_id}")
+async def get_album_songs(album_id: str):
+    conn = await open_connection()
+
+    if conn is None:
+        raise HTTPException(status_code=503, detail="Could not open a connection to database!")
+
+    try:
+        album_query = """SELECT * FROM music_service.album WHERE album_id = $1"""
+        album_row = await conn.fetchrow(album_query, album_id)
+
+        if not album_row:
+            raise HTTPException(status_code=404, detail="Album not found!")
+
+        result = dict(album_row)
+
+        song_query = """SELECT * FROM music_service.song WHERE album_id = $1"""
+        song_rows = await conn.fetch(song_query, album_id)
+
+        if not song_rows:
+            raise HTTPException(status_code=404, detail="This Album has no songs!")
+
+        result["songs"] = [dict(song) for song in song_rows]
+
+        if not result:
+            raise HTTPException(status_code=404, detail="No such album and/or its songs exist.")
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(code=500, detail="Failed fetching songs of the album.")
+    finally:
+        await close_connection(conn)
+
+@app.get("/artist/{artist_id}")
+async def get_artist_albums(artist_id: str):
+    conn = await open_connection()
+    
+    if conn is None:
+        raise HTTPException(status_code=503, detail="Could not open a connection to database!")
+
+    try:
+        artist_query = """SELECT * FROM music_service.artist WHERE artist_id = $1"""
+        artist_row = await conn.fetchrow(artist_query, artist_id)
+
+        if not artist_row:
+            raise HTTPException(status_code=404, detail="No such artist exists!")
+
+        result = dict(artist_row)
+
+        album_query = """SELECT * FROM music_service.album WHERE artist_id = $1"""
+        album_rows = await conn.fetch(album_query, artist_id)
+
+        if not artist_row:
+                    raise HTTPException(status_code=404, detail="No album exists for this artist!")
+
+        result["songs"] = [dict(album) for album in album_rows]
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(code=500, detail="Failed fetching songs of the album.")
+    finally:
+        await close_connection(conn)
+
+# Token Auth Required (Not Done)
 @app.get("/song/{song_id}/stream/{quality}", response_class=StreamingResponse)
 async def stream_song(song_id: str, quality: str, request: Request):
 
@@ -261,73 +326,82 @@ async def stream_song(song_id: str, quality: str, request: Request):
 
     return StreamingResponse(iter_full(), media_type=media_type, headers=headers)
 
-# Done
-@app.get("/album/{album_id}")
-async def get_album_songs(album_id: str):
+# Post endpoint
+
+# Waiting for token implementation (Not Done)
+@app.post("/register")
+async def register_user(registration_body: UserOnRegister):
+    conn = await open_connection()
+
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Cannot open connection with database.")
+
+    try:
+        validation_query = """SELECT * FROM music_service.user WHERE email = $1 or username = $2 LIMIT 1"""
+        match = await conn.fetchrow(validation_query, registration_body.email, registration_body.username)
+
+        if match["username"] == registration_body.username:
+            raise HTTPException(status_code=400, detail="Username already exists!")
+        
+        if match["email"] == registration_body.email:
+            raise HTTPException(status_code=400, detail="Username already exists!")
+
+        if registration_body.confirmation_password != registration_body.password:
+            raise HTTPException(status_code=400, detail="Passwords do not match!")
+
+        salt = bcrypt.gensalt()
+
+        pass_bytes = registration_body.password.encode('utf-8')
+
+        hashed_password = bcrypt.hashpw(pass_bytes, salt)
+
+        insert_user_query = """INSERT INTO music_service.user (email, password, name, surname, username, date_of_birth, country) 
+                                VALUES ($1, $2, $3, $4, $5, $6, $7)"""
+        await conn.execute(
+            insert_user_query,
+            registration_body.email,
+            hashed_password,
+            registration_body.name,
+            registration_body.surname,
+            registration_body.username,
+            registration_body.date_of_birth,
+            registration_body.country
+            )
+
+        return {"message": f"User by username of {registration_body.username} inserted successfully!"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to register user. Exception: {e}")
+    finally:
+        close_connection(conn)
+
+# Waiting for token implementation (Not Done)
+@app.post("/login")
+async def login_user(login_body: UserOnLogin):
     conn = open_connection()
 
     if conn is None:
-        raise HTTPException(status_code=503, detail="Could not open a connection to database!")
+        raise HTTPException(status_code=500, detail="Cannot open connection with database.")
 
     try:
-        album_query = """SELECT * FROM music_service.album WHERE album_id = $1"""
-        album_row = await conn.fetchrow(album_query, album_id)
+        validation_query = """SELECT username, password FROM music_service.user WHERE username = $1 LIMIT 1"""
 
-        if not album_row:
-            raise HTTPException(status_code=404, detail="Album not found!")
+        match = await conn.fetchrow(validation_query, login_body.username)
 
-        result = dict(album_row)
+        if not match:
+            raise HTTPException(status_code=404, detail="User with this username not found!")
 
-        song_query = """SELECT * FROM music_service.song WHERE album_id = $1"""
-        song_rows = await conn.fetch(song_query, album_id)
+        pass_bytes = login_body.password.encode('utf-8')
+            
+        if bcrypt.checkpw(pass_bytes, match["password"]) is False:
+            raise HTTPException(status_code=403, detail="Password does not match!")
 
-        if not song_rows:
-            raise HTTPException(status_code=404, detail="This Album has no songs!")
-
-        result["songs"] = [dict(song) for song in song_rows]
-
-        if not result:
-            raise HTTPException(status_code=404, detail="No such album and/or its songs exist.")
-
-        return result
+        return "success!"
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(code=500, detail="Failed fetching songs of the album.")
+        raise HTTPException(status_code=500, detail=f"Failed to login! Exception: {e}")
     finally:
-        await close_connection(conn)
-
-# Done
-@app.get("/artist/{artist_id}")
-async def get_artist_albums(artist_id: str):
-    conn = open_connection()
-    
-    if conn is None:
-        raise HTTPException(status_code=503, detail="Could not open a connection to database!")
-
-    try:
-        artist_query = """SELECT * FROM music_service.artist WHERE artist_id = $1"""
-        artist_row = await conn.fetchrow(artist_query, artist_id)
-
-        if not artist_row:
-            raise HTTPException(status_code=404, detail="No such artist exists!")
-
-        result = dict(artist_row)
-
-        album_query = """SELECT * FROM music_service.album WHERE artist_id = $1"""
-        album_rows = await conn.fetch(album_query, artist_id)
-
-        if not artist_row:
-                    raise HTTPException(status_code=404, detail="No album exists for this artist!")
-
-        result["songs"] = [dict(album) for album in album_rows]
-
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(code=500, detail="Failed fetching songs of the album.")
-    finally:
-        await close_connection(conn)
+        close_connection(conn)
