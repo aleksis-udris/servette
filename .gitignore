@@ -11,3 +11,5 @@
 /api/src/api/.env
 /api/src/api/index.html
 /schema/insert_statements.sql
+/quick_db_info_editor/*
+/song_data.txt
