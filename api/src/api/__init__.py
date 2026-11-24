@@ -44,6 +44,22 @@ async def artist_info(artist_id: str):
 async def album_info(album_id: str):
     return await album_deep(album_id)
 
+@app.get("/song/{song_id}")
+async def song_info(song_id: str):
+    return await song_metadata(song_id)
+
+@app.get("/album/cover/file")
+def cover(bucket: str, key: str):
+    root = os.path.realpath(os.environ["ASSET_DIR"])
+    file_path = os.path.realpath(os.path.join(root, bucket, key))
+
+    if os.path.commonpath([root, file_path]) != root:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(file_path)
+
 # Token Auth Required (Not Done)
 @app.get("/song/{song_id}/stream/{quality}", response_class=StreamingResponse)
 async def stream_song(song_id: str, quality: str, request: Request):

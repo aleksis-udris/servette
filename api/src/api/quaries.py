@@ -152,7 +152,45 @@ async def album_deep(album_id: str) -> dict:
     return data
 
 async def song_metadata(song_id: str) -> dict:
-    return None
+
+    song_data_query = """
+                        SELECT
+                            s.title, s.duration_ms, s.track_num, s.explicit, s.language, a.img_bucket, a.img_storage_key
+                        FROM music_service.song AS s
+                        LEFT JOIN music_service.album AS a ON s.album_id = a.album_id
+                        WHERE s.song_id = $1"""
+
+    genre_query = """
+                    SELECT
+                        g.genre_id, g.name, g.description
+                    FROM music_service.song_genre AS sg
+                    LEFT JOIN music_service.genre AS g ON sg.genre_id = g.genre_id
+                    WHERE sg.song_id = $1"""
+
+    mood_query = """
+                    SELECT
+                        m.mood_id, m.name, m.color_hex
+                    FROM music_service.song_mood AS sm
+                    LEFT JOIN music_service.mood AS m ON sm.mood_id = m.mood_id
+                    WHERE sm.song_id = $1"""
+    
+    conn = await open_connection()
+
+    data = {}
+
+    song = await conn.fetchrow(song_data_query, song_id)
+
+    data["song"] = {**dict(song), "moods": [], "genres": []}
+
+    genres = await conn.fetch(genre_query, song_id)
+
+    data["song"]["genres"] = [dict(genre) for genre in genres]
+
+    moods = await conn.fetch(mood_query, song_id)
+
+    data["song"]["moods"] = [dict(mood) for mood in moods]
+    
+    return data
 
 async def playlist_deep(playlist_id: str) -> dict:
     return None
