@@ -1,4 +1,4 @@
-DROP SCHEMA IF EXISTS music_service;
+DROP SCHEMA IF EXISTS music_service CASCADE;
 CREATE SCHEMA IF NOT EXISTS music_service;
 SET search_path TO music_service;
 
@@ -18,15 +18,19 @@ CREATE TYPE visibility AS ENUM('public', 'private', 'privileged');
 
 CREATE TYPE song_state AS ENUM('suggested', 'accepted', 'expired');
 
+CREATE TYPE lyric_format AS ENUM('lrc', 'ttml', 'plain_text');
+
+CREATE TYPE artist_involvement AS ENUM('primary', 'collaborator', 'producer', 'composer', 'lyricist');
+
 DROP TABLE IF EXISTS artist;
 CREATE TABLE IF NOT EXISTS artist (
 	artist_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
-	"name" varchar,
+	"name" varchar NOT NULL,
 	biography text,
 	country varchar,
-	formed_year int,
-	img_bucket varchar,
-	img_storage_key varchar,
+	formed_year int NOT NULL,
+	img_bucket varchar NOT NULL,
+	img_storage_key varchar NOT NULL,
 	verified_at timestamp
 );
 
@@ -35,10 +39,9 @@ CREATE INDEX ON artist("name");
 DROP TABLE IF EXISTS album;
 CREATE TABLE IF NOT EXISTS album (
 	album_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
-	artist_id UUID REFERENCES artist(artist_id) ON DELETE CASCADE,
-	title varchar,
-	img_bucket varchar,
-	img_storage_key varchar,
+	title varchar NOT NULL,
+	img_bucket varchar NOT NULL,
+	img_storage_key varchar NOT NULL,
 	release_date date,
 	"type" album_type,
 	"label" varchar,
@@ -48,6 +51,15 @@ CREATE TABLE IF NOT EXISTS album (
 );
 
 CREATE INDEX ON album(title);
+
+DROP TABLE IF EXISTS artist_album;
+CREATE TABLE IF NOT EXISTS artist_album (
+	artist_id UUID REFERENCES artist(artist_id) ON DELETE CASCADE,
+	album_id UUID REFERENCES album(album_id) ON DELETE CASCADE,
+	PRIMARY KEY (artist_id, album_id)
+);
+
+CREATE INDEX ON artist_album(album_id);
 
 DROP TABLE IF EXISTS song;
 CREATE TABLE IF NOT EXISTS song (
@@ -65,15 +77,36 @@ CREATE TABLE IF NOT EXISTS song (
 	created_at timestamp
 );
 
-CREATE INDEX ON song(title);
+CREATE INDEX song_title_idx ON song(title);
+CREATE INDEX song_album_idx ON song(album_id);
+
+DROP TABLE IF EXISTS artist_song;
+CREATE TABLE IF NOT EXISTS artist_song (
+	artist_id UUID REFERENCES artist(artist_id) ON DELETE CASCADE,
+	song_id UUID REFERENCES song(song_id) ON DELETE CASCADE,
+	artist_type artist_involvement NOT NULL,
+	PRIMARY KEY (artist_id, song_id)
+);
+
+CREATE INDEX artist_song_song_idx ON artist_song(song_id);
+
+
+DROP TABLE IF EXISTS lyrics;
+CREATE TABLE IF NOT EXISTS lyrics (
+	lyric_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
+	song_id UUID REFERENCES song(song_id) ON DELETE SET NULL,
+	storage_key varchar NOT NULL,
+	bucket varchar NOT NULL,
+	format lyric_format NOT NULL
+);
 
 DROP TABLE IF EXISTS audio_file;
 CREATE TABLE IF NOT EXISTS audio_file (
 	file_id UUID PRIMARY KEY DEFAULT uuid_generate_v1(),
 	song_id UUID REFERENCES song(song_id) ON DELETE SET NULL,
-	storage_key varchar,
-	bucket varchar,
-	format file_format,
+	storage_key varchar NOT NULL,
+	bucket varchar NOT NULL,
+	format file_format NOT NULL,
 	bitrate_kbps int,
 	file_size_bytes int,
 	checksum_md5 varchar UNIQUE,
@@ -91,8 +124,8 @@ CREATE TABLE IF NOT EXISTS "user" (
 	"name" varchar,
 	surname varchar,
 	username varchar UNIQUE,
-	img_bucket varchar,
-	img_storage_key varchar,
+	img_bucket varchar NOT NULL,
+	img_storage_key varchar NOT NULL,
 	date_of_birth date,
 	country varchar,
 	plan plan_tier,
@@ -118,8 +151,8 @@ CREATE TABLE IF NOT EXISTS playlist (
 	user_id UUID REFERENCES "user"(user_id) ON DELETE SET NULL,
 	title varchar,
 	description varchar,
-	img_bucket varchar,
-	img_storage_key varchar,
+	img_bucket varchar NOT NULL,
+	img_storage_key varchar NOT NULL,
 	playlist_visibility visibility,
 	total_tracks int,
 	created_at timestamp DEFAULT current_timestamp,
@@ -246,8 +279,8 @@ CREATE TABLE IF NOT EXISTS user_history (
 	ip_country varchar
 );
 
-CREATE INDEX ON user_history(user_id);
-CREATE INDEX ON user_history(song_id);
+CREATE INDEX user_history_user_idx ON user_history(user_id);
+CREATE INDEX user_history_song_idx ON user_history(song_id);
 
 DROP TABLE IF EXISTS mood;
 CREATE TABLE IF NOT EXISTS mood (
@@ -294,3 +327,30 @@ SELECT f1.user_id, f1.followed_user_id AS friend_id
 		WHERE (b.user_id = f1.user_id AND b.blocked_user_id = f1.followed_user_id)
 			OR (b.user_id = f2.user_id AND b.blocked_user_id = f2.followed_user_id)
 	);
+
+DROP MATERIALIZED VIEW IF EXISTS song_stats_mv;
+CREATE MATERIALIZED VIEW song_stats_mv AS
+SELECT
+	song_id,
+	COUNT(*) AS total_plays
+FROM user_history
+GROUP BY song_id;
+
+DROP VIEW IF EXISTS album_stats;
+CREATE VIEW album_stats AS
+SELECT
+	s.album_id,
+	COALESCE(SUM(ssm.total_plays), 0) AS total_listens
+FROM song AS s
+LEFT JOIN song_stats_mv AS ssm ON s.song_id = ssm.song_id
+GROUP BY s.album_id;
+
+DROP MATERIALIZED VIEW IF EXISTS artist_monthly_listeners;
+CREATE MATERIALIZED VIEW artist_monthly_listeners AS
+SELECT
+	sa.artist_id,
+	COUNT(DISTINCT uh.user_id) AS monthly_listeners
+FROM user_history AS uh 
+JOIN artist_song AS sa ON uh.song_id = sa.song_id
+WHERE uh.played_at >= NOW() - INTERVAL '30 days'
+GROUP BY sa.artist_id;
