@@ -13,3 +13,5 @@
 /schema/insert_statements.sql
 /quick_db_info_editor/*
 /song_data.txt
+commands.md
+schema/Queries.sql
