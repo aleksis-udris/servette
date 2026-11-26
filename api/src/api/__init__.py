@@ -36,20 +36,46 @@ async def health():
                 "message": "API is running smoothly."
             }
 
-@app.get("/artist/{artist_id}")
+@app.get("/artist/{artist_id}/detailed")
 async def artist_info(artist_id: str):
     return await artist_deep(artist_id)
 
-@app.get("/album/{album_id}")
+@app.get("/artist/{artist_id}")
+async def display_artist(artist_id: str):
+    return await artist_surface(artist_id)
+
+@app.get("/album/{album_id}/detailed")
 async def album_info(album_id: str):
     return await album_deep(album_id)
 
-@app.get("/song/{song_id}")
+@app.get("/album/{album_id}")
+async def display_album(album_id: str):
+    return None
+
+@app.get("/song/{song_id}/detailed")
 async def song_info(song_id: str):
     return await song_metadata(song_id)
 
+@app.get("/song/{song_id}")
+async def display_song(song_id: str):
+
+
+    return None
+
 @app.get("/album/cover/file")
 def cover(bucket: str, key: str):
+    root = os.path.realpath(os.environ["ASSET_DIR"])
+    file_path = os.path.realpath(os.path.join(root, bucket, key))
+
+    if os.path.commonpath([root, file_path]) != root:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(file_path)
+
+@app.get("/artist/picture/file")
+def picture(bucket: str, key: str):
     root = os.path.realpath(os.environ["ASSET_DIR"])
     file_path = os.path.realpath(os.path.join(root, bucket, key))
 
